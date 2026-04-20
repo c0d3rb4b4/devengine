@@ -1,0 +1,15 @@
+[app]
+name = "DevEngine"
+environment = "local"
+log_level = "INFO"
+
+[agent]
+default_base_branch = "develop"
+max_ci_retries = 3
+max_active_runs_per_repo = 1
+
+[webhook]
+listen_path = "/github/webhook"
+
+[runner]
+workspace_root = "/app/workspace"

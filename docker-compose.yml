@@ -1,0 +1,103 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: devengine-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${LOCAL_TIMEZONE}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: devengine-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis-data:/data
+    profiles: ["cache"]
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: devengine-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ENABLE_REDIS: ${ENABLE_REDIS}
+    ports:
+      - "${API_PORT}:${API_PORT}"
+    volumes:
+      - ./config:/app/config:ro
+      - ./workspace:/app/workspace
+      - ./logs:/app/logs
+      - ./secrets:/app/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  agent:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    container_name: devengine-agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./config:/app/config:ro
+      - ./workspace:/app/workspace
+      - ./logs:/app/logs
+      - ./secrets:/app/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  runner:
+    build:
+      context: .
+      dockerfile: runner/Dockerfile
+    container_name: devengine-runner
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./config:/app/config:ro
+      - ./workspace:/app/workspace
+      - ./logs:/app/logs
+      - ./secrets:/app/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: devengine-ngrok
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    command: >-
+      http api:${API_PORT}
+      ${NGROK_DOMAIN:+--domain=${NGROK_DOMAIN}}
+    depends_on:
+      - api
+
+networks:
+  default:
+    name: devengine-net

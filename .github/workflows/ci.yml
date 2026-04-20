@@ -1,0 +1,22 @@
+name: devengine-ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  lint-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate compose file exists
+        run: test -f docker-compose.yml
+
+      - name: Validate bootstrap scripts exist
+        run: |
+          test -f bootstrap.sh
+          test -f scripts/bootstrap_vm.sh

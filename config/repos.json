@@ -1,0 +1,13 @@
+{
+  "repos": {
+    "c0d3rb4b4/nato-phonetics": {
+      "enabled": true,
+      "base_branch": "develop",
+      "workspace_subdir": "nato-phonetics",
+      "max_ci_retries": 3,
+      "allowed_labels": [
+        "agent:trial"
+      ]
+    }
+  }
+}
