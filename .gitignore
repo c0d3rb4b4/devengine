@@ -13,3 +13,14 @@ logs/*
 !logs/.gitkeep
 postgres/data/
 .DS_Store
+
+# Runtime/devEngine local state
+.env
+secrets/*
+!secrets/.gitkeep
+workspace/*
+!workspace/.gitkeep
+logs/*
+!logs/.gitkeep
+postgres/data/
+redis-data/
