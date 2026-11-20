@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git openssh-cli
 COPY runner/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
+COPY devengine /app/devengine
 COPY runner /app/runner
 COPY config /app/config
 

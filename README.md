@@ -133,6 +133,41 @@ chmod +x bootstrap.sh teardown.sh scripts/*.sh
 ./scripts/check_health.sh
 ```
 
+## Trial webhook flow
+
+DevEngine can run a safe GitHub App trial when an issue is opened or labeled.
+
+The GitHub App webhook should point at:
+
+```text
+POST /github/webhook
+```
+
+For `issues.opened` and `issues.labeled` events, the API now:
+
+- validates the GitHub webhook signature with `GITHUB_WEBHOOK_SECRET`
+- checks `repository.full_name` exists in `config/repos.json`
+- checks the repo entry is enabled
+- checks the issue has one of the repo `allowed_labels`, currently `agent:trial`
+- starts the trial issue runner with a FastAPI background task
+- returns `202` with `status: accepted`
+
+Unrelated events and issue actions return `status: ignored` without starting a runner.
+
+The trial runner is intentionally limited. It uses GitHub App auth, creates a branch from the configured base branch, writes `AGENT_TRIAL.md`, commits it, and pushes the branch. It does not run LLM logic and does not merge anything.
+
+You can still run the same flow manually:
+
+```bash
+python scripts/run_trial_issue.py
+```
+
+Optional manual overrides:
+
+```bash
+python scripts/run_trial_issue.py --repo c0d3rb4b4/nato-phonetics --issue 123
+```
+
 ## Services
 
 ### API

@@ -1,100 +1,64 @@
 import os
-import time
+import sys
 from pathlib import Path
 
-import jwt
-import requests
 from dotenv import load_dotenv
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from devengine.config import load_repo_config
+from devengine.github_app import (
+    get_installation_token,
+    get_repo_installation,
+    github_api_request,
+    installation_token_headers,
+)
 
 load_dotenv()
 
-APP_ID = os.environ["GITHUB_APP_ID"]
-PRIVATE_KEY_PATH = os.environ.get("GITHUB_PRIVATE_KEY_PATH", "/app/secrets/github-app.pem")
-TARGET_REPO = "c0d3rb4b4/nato-phonetics"
+FALLBACK_TARGET_REPO = "c0d3rb4b4/nato-phonetics"
 
-if PRIVATE_KEY_PATH.startswith("/app/"):
-    PRIVATE_KEY_PATH = PRIVATE_KEY_PATH.replace("/app/", "./", 1)
 
-private_key = Path(PRIVATE_KEY_PATH).read_text()
+def _default_repo() -> str:
+    configured_repos = load_repo_config().get("repos", {})
+    enabled_repos = [
+        repo_full_name
+        for repo_full_name, repo_config in configured_repos.items()
+        if repo_config.get("enabled", False)
+    ]
+    if enabled_repos:
+        return enabled_repos[0]
+    return os.getenv("TARGET_REPO", FALLBACK_TARGET_REPO)
 
-now = int(time.time())
-payload = {
-    "iat": now - 60,
-    "exp": now + (9 * 60),
-    "iss": APP_ID,
-}
 
-app_jwt = jwt.encode(payload, private_key, algorithm="RS256")
+def main() -> None:
+    target_repo = os.getenv("TARGET_REPO", _default_repo())
+    installation = get_repo_installation(target_repo)
+    print(f"Installation ID: {installation['id']}")
 
-app_headers = {
-    "Authorization": f"Bearer {app_jwt}",
-    "Accept": "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-}
+    installation_token = get_installation_token(target_repo)
+    headers = installation_token_headers(installation_token)
 
-installations_response = requests.get(
-    "https://api.github.com/app/installations",
-    headers=app_headers,
-    timeout=30,
-)
-installations_response.raise_for_status()
+    repo = github_api_request("GET", f"/repos/{target_repo}", headers=headers)
+    print("Repo status: 200")
+    print("Repo full name:", repo["full_name"])
+    print("Default branch:", repo["default_branch"])
+    print("Private:", repo["private"])
 
-installations = installations_response.json()
+    issues = github_api_request(
+        "GET",
+        f"/repos/{target_repo}/issues",
+        headers=headers,
+        params={"state": "open", "per_page": 5},
+    )
 
-installation = None
-for item in installations:
-    if item["account"]["login"] == "c0d3rb4b4":
-        installation = item
-        break
+    print("Issues status: 200")
+    print(f"Open issues returned: {len(issues)}")
+    for issue in issues:
+        print(f"- #{issue['number']}: {issue['title']}")
 
-if not installation:
-    raise RuntimeError("Could not find installation for c0d3rb4b4")
 
-installation_id = installation["id"]
-print(f"Installation ID: {installation_id}")
-
-token_response = requests.post(
-    f"https://api.github.com/app/installations/{installation_id}/access_tokens",
-    headers=app_headers,
-    timeout=30,
-)
-print("Token status:", token_response.status_code)
-print(token_response.text)
-token_response.raise_for_status()
-
-installation_token = token_response.json()["token"]
-
-repo_headers = {
-    "Authorization": f"Bearer {installation_token}",
-    "Accept": "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-}
-
-repo_response = requests.get(
-    f"https://api.github.com/repos/{TARGET_REPO}",
-    headers=repo_headers,
-    timeout=30,
-)
-
-print("Repo status:", repo_response.status_code)
-repo_response.raise_for_status()
-
-repo = repo_response.json()
-print("Repo full name:", repo["full_name"])
-print("Default branch:", repo["default_branch"])
-print("Private:", repo["private"])
-
-issues_response = requests.get(
-    f"https://api.github.com/repos/{TARGET_REPO}/issues",
-    headers=repo_headers,
-    params={"state": "open", "per_page": 5},
-    timeout=30,
-)
-
-print("Issues status:", issues_response.status_code)
-issues_response.raise_for_status()
-
-issues = issues_response.json()
-print(f"Open issues returned: {len(issues)}")
-for issue in issues:
-    print(f"- #{issue['number']}: {issue['title']}")
+if __name__ == "__main__":
+    main()
